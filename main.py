@@ -1,14 +1,14 @@
 import pygame, sys
 from pygame.locals import QUIT
 pygame.init()
-display = pygame.display.set_mode((400, 300))
+display = pygame.display.set_mode((800, 800))
 pygame.display.set_caption('parabola')
 
 # Initializing Pygame
 pygame.init()
 
 # Initializing surface
-surface = pygame.display.set_mode((400, 300))
+surface = pygame.display.set_mode((800, 800))
 
 
 class PhysicObject:
@@ -49,9 +49,11 @@ class PhysicObject:
         # ajoute la vitesse a la position
         self.position[0] += self.vitesse[0] / self.render
         self.vitesse[0] += self.acceleration[0] / self.render
+        self.vitesse[0] /= 1.01
         if self.position[1] + self.vitesse[1] / self.render < Y_FLOOR:
             self.position[1] += self.vitesse[1] / self.render
             self.vitesse[1] += self.acceleration[1] / self.render
+            self.vitesse[1] /= 1.01
             if display:
                 self.put_sprite(screen)
             return False  # pas eu de collision avec le sol
@@ -62,11 +64,11 @@ class PhysicObject:
     def distance(self, object):
         return ((self.position[0] - object.position[0]) ** 2 + (self.position[1] - object.position[1]) ** 2) ** (1 / 2) - object.radius - self.radius
 
-    def is_colliding(self, objects):
+    def is_colliding(self, objects, exeption = None):
         if objects is None:
             return False
         for object in objects:
-            if object != self and self.distance(object) < 0:
+            if exeption != object and object != self and self.distance(object) < 0:
                 return object
         return None
 
@@ -82,6 +84,10 @@ class Tank(PhysicObject):
         PhysicObject.__init__(self, sprite_path, 10, pos_x, pos_y, 0, 0, 0, 1, 10)
         self.projectile = None
         self.hp = 100
+
+
+    def is_dead(self):
+        return self.hp <= 0
 
     def shoot(self):
         self.projectile = PhysicObject(
@@ -105,13 +111,13 @@ class Tank(PhysicObject):
         if self.projectile is not None:
             if self.projectile.step_and_collid(screen):
                 self.projectile = None
-                return
-            all_tanks.remove(self)
-            tank_ennemi = self.projectile.is_colliding(all_tanks)
+                return True
+            tank_ennemi = self.projectile.is_colliding(all_tanks, self)
             if tank_ennemi != None:
                 self.projectile = None
                 tank_ennemi.take_damage(self.pwr)
-            all_tanks.append(self)
+                return True
+            return False
 
 
 
@@ -138,15 +144,17 @@ def draw_parabol(origin):
             break
 
 
+import time
 def main():
     tank = Tank("mouton", "mouton.png", 100, 100, 100)
     tank2 = Tank("mouton2", "mouton2.jpg", 300, 100, 100)
-    all_tank = [tank, tank2]
+    all_player = [tank, tank2]
+    current_player = 0
+    player_time = time.time()
+    print(time.time())
+    print(time.time())
+    print(time.time())
     while True:
-        # divise la vitesse du tank pour simuler la friction du sol / air
-        # (pour pas quil avance a l'infini)
-        tank.vitesse[0] /= 1.05
-        tank.vitesse[1] /= 1.01
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
@@ -155,32 +163,37 @@ def main():
             if event.type == pygame.KEYDOWN:
                 keys = pygame.key.get_pressed()
                 if keys[pygame.K_SPACE]:
-                    if tank.position[1] >= 199:
-                        tank.vitesse[1] = -10
+                    if all_player[current_player].position[1] >= 199:
+                        all_player[current_player].vitesse[1] = -10
                 if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-                    tank.vitesse[0] = -10
+                    all_player[current_player].vitesse[0] = -10
                 if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-                    tank.vitesse[0] = 10
+                    all_player[current_player].vitesse[0] = 10
                 if keys[pygame.K_e]:
-                    tank.shoot()
+                    all_player[current_player].shoot()
 
         # clean le canvas
         surface.fill((0, 0, 0))
         # dessine le sol
         pygame.draw.rect(surface, (0, 255, 0), pygame.Rect(0, 200, 400, 100))
         # dessine la ligne
-        pygame.draw.line(surface, (255, 255, 0), tank.position,
+        pygame.draw.line(surface, (255, 255, 0), all_player[current_player].position,
                          pygame.mouse.get_pos())
-        # dessine le tank lol
-        pygame.draw.circle(surface, (255,255,255), tank.position, 10)
+
         # dessine la parabole
-        draw_parabol(tank.position)
+        draw_parabol(all_player[current_player].position)
         # fait prendre un step au tank
-        tank.step_and_collid(display)
-        if tank2.hp >= 0:
-            tank2.step_and_collid(display)
-        tank.step_shoot(display, all_tank)
+        for player in all_player:
+            player.step_and_collid(display)
+        if all_player[current_player].step_shoot(display, all_player):
+            current_player = (current_player + 1) % 2
+            player_time = time.time()
+
+        if time.time() - player_time >= 10:
+            current_player = (current_player + 1) % 2
+            player_time = time.time()
         pygame.display.update()
+
 
 
 if __name__ == '__main__':
